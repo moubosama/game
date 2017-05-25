@@ -1,0 +1,290 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    
+    <title>
+      Dogge Stones
+    </title>
+    <meta name="description" content="${description}" />
+    
+    <style>
+
+*, *:before, *:after {
+      box-sizing: border-box; 
+    }
+    html {
+      font-size: 62.5%;
+    }
+    body {
+      color: #444;
+      background-color: hsl(0, 0%, 96%);
+    }
+    h1 {
+      font-size: 1.8rem;
+    }
+
+    </style>
+  </head>
+  <body>
+    <script src="http://cdn.rawgit.com/phi-jp/phina.js/v0.2.0/build/phina.js"></script>
+    <script>
+        phina.globalize();
+
+        //定数
+        var SPEED          = 8; // 移動速度
+        var STONE_NUM      = 10; // 石の数
+        var SCREEN_WIDTH   = 640; // 画面横サイズ
+        var SCREEN_HEIGHT  = 800; // 画面縦サイズ
+        var SHAPE_SIZE     = 16;  // 当たり判定処理
+        var SHAPE_HALF     = SHAPE_SIZE / 2;　//当たり判定サイズ
+        var HIT_RADIUS     = 16;  // 当たり判定用の半径
+        var JUMP_POWER     = 10; //ジャンプ力
+
+      var ASSETS = {
+        // 画像
+        image: {
+          'tomapiko': 'https://rawgit.com/phi-jp/phina.js/develop/assets/images/tomapiko_ss.png',
+            // 地面
+            'ground': 'https://rawgit.com/alkn203/tomapiko_void/master/assets/image/ground.png',
+            // 敵
+            'karasu': 'https://rawgit.com/phi-jp/phina.js/develop/assets/images/karasu_ss.png',
+        },
+        // フレームアニメーション情報
+        spritesheet: {
+          'tomapiko_ss': 'https://rawgit.com/phi-jp/phina.js/develop/assets/tmss/tomapiko.tmss',
+        },
+        sound: {
+          'bgm': 'https://rawgit.com/moubosama/test/master/bgm_maoudamashii_8bit25.mp3',
+        },
+      };       
+      /*
+       * メインシーン
+       */
+        phina.define("MainScene", {
+          // 継承
+          superClass: 'DisplayScene',
+          // コンストラクタ
+          init: function() {
+            // 親クラス初期化
+           this.superInit({
+              // 画面サイズ
+              width: SCREEN_WIDTH,
+              height: SCREEN_HEIGHT,
+            });
+            // 背景
+            this.backgroundColor = 'skyblue';
+            // カスタムgrid
+            // デフォルトには16ｘ16のgridが設定される、新たに画面の横サイズを１０分割する
+            var grid = Grid(SCREEN_WIDTH, 10);
+            // 繰り返し処理
+            var self = this;
+            (10).times(function(i){
+              // 地面配置
+              Ground().addChildTo(self).setPosition(grid.span(i), grid.span(11.5));
+            });
+
+            // プレイヤー作成
+            this.player = Player().addChildTo(this).setPosition(grid.center(), grid.span(11.2));
+            // 石をグループ化
+            this.stones = DisplayElement().addChildTo(this);
+
+            // 経過時間表示ラベル
+            this.timerLabel = Label().addChildTo(this)
+                             .setPosition(grid.span(1.5), grid.span(1));
+            // 経過時間
+            this.time = 0;
+
+            // ランダムで石を表示
+            this.generateStone();
+
+              // 仮のBGM削除と再生
+                var playBtn = Shape({
+                  backgroundColor: 'red',
+                  x: this.gridX.center(-2),
+                  y: this.gridY.center(),
+                }).addChildTo(this);
+                // タッチを有効に
+                playBtn.setInteractive(true);
+                // タッチイベント
+                playBtn.onpointend = function() {
+                  // 音再生
+                  SoundManager.playMusic('bgm');
+                };
+
+              // 中断ボタン作成
+              var pauseBtn = Shape({
+                backgroundColor: 'blue',
+                x: this.gridX.center(),
+                y: this.gridY.center(),
+              }).addChildTo(this);
+              // タッチイベント
+              pauseBtn.onpointend = function() {
+                // 一時停止
+                SoundManager.stopMusic();
+                console.log("hoge");
+              };
+        },
+
+        // ゲームオーバー処理
+        onover: function () {
+          // リザルトシーン
+          this.exit({
+            score: this.getFixedTime(),
+            message: '一日一善',
+          });
+        },
+
+        // 更新処理
+        update: function(app) {
+          var nums = this.stones.children;
+          if (app.frame % 2 === 0 && nums.length < STONE_NUM) {
+            this.generateStone();
+          }
+          //　石とプレイヤーのあたり判定
+          // this.hitTestStonesPlayer();
+          // 1フレームの経過時間を加算
+          this.time += app.deltaTime;
+          //　ラベル表示変更
+          this.timerLabel.text = "Time: {0}".format(this.getFixedTime());
+          if (this.timerLabel.text == "Time: 72") {
+            this.exit({
+              score: this.getFixedTime(),
+              message: 'ゲームクリア！',
+            });
+          }
+        },
+
+
+        // 表示用の経過時間を返す処理
+        getFixedTime: function () {
+          return Math.floor(this.time / 1000);
+        },
+
+        // ランダムで石を表示
+        generateStone: function() {
+          // 位置決めにランダム値を利用
+          var x = this.gridX.span(Random.randint(0, 16));
+          var y = this.gridY.span(Random.randint(0, 0));
+          // グループに追加
+          Stone().addChildTo(this.stones).setPosition(x, y);
+          if ( y === 10 ) {
+            this.stones.remove();
+          }
+        },
+
+        // 敵とプレイヤーの当たり判定処理
+        hitTestStonesPlayer: function() {
+          var player = this.player;
+          var self = this;
+          // 石をループ
+          this.stones.children.each(function(stones) {
+            // 判定用の円
+            var c1 = Circle(player.x, player.y, 10); 
+            var c2 = Circle(stones.x, stones.y, 10); 
+            // 円判定
+            if (Collision.testCircleCircle(c1, c2)) {
+             // ゲームオーバーイベント発火
+             self.flare('over');
+            }
+          });
+        },
+
+      });
+
+      /*
+       * 地面クラス
+       */
+       phina.define('Ground', {
+        // 継承
+        superClass: 'Sprite',
+        // コンストラクタ
+        init: function() {
+          // 親クラス初期化
+          this.superInit('ground');
+          // 原点を左上
+          this.origin.set(0,0);
+        },
+       });
+      /*
+       * 岩クラス
+       */
+       phina.define('Stone', {
+        superClass: 'CircleShape',
+          // コンストラクタ
+        init: function() {
+          this.superInit({
+            radius: 20,
+            fill: 'gray',
+            stroke: null,
+            cornerRadius: 8,
+          });
+          this.physical.gravity.y = 0.2;
+        },
+       });
+      /*
+       * プレイヤークラス
+       */
+      phina.define("Player", {
+        // 継承
+        superClass: 'Sprite',
+        // コンストラクタ
+        init: function() {
+          // 親クラス初期化
+          this.superInit('tomapiko', 64, 64);
+          // スプライトにフレームアニメーションをアタッチ
+          FrameAnimation('tomapiko_ss').attachTo(this).gotoAndPlay('right');
+        },
+        // 更新処理
+        update: function(app) {
+          var key = app.keyboard;
+
+          // 画面左
+          if (key.getKey('left')) { 
+            this.x -= SPEED;
+            // 向き判定
+            this.scaleX = -1;
+          }
+          if (key.getKey('right')) { 
+            this.x += SPEED;
+            // 向き判定
+            this.scaleX = 1;
+          }
+
+          //　スクリーン場外制御
+          if (this.left < 0) {
+            this.x += SPEED;
+          } else if (SCREEN_WIDTH < this.right) {
+            this.x -= SPEED;
+          }
+
+          if (key.getKey('up')) {
+              this.y -= JUMP_POWER;
+              this.physical.gravity.y = 0.2;
+              if (this.hitTestElement(Ground())) {
+                this.physical.gravity.y = 0;
+              }
+          }
+
+        },
+      });
+       /*
+       * メイン処理
+       */
+      phina.main(function() {
+        // アプリケーションを生成
+        var app = GameApp({
+          title: "Dogge Stones",
+          assets: ASSETS,
+          tartLabel: 'main',
+          // startLabel: 'splash',
+        });
+        // 実行
+        app.run();
+      });
+    </script>
+  </body>
+</html>
+
+
